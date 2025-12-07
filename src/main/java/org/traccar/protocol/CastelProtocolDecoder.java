@@ -41,6 +41,9 @@ import java.util.Map;
 public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
     private static final Map<Integer, Integer> PID_LENGTH_MAP = new HashMap<>();
+    private static final Map<Integer, String> PASSENGER_DTCS = new HashMap<>();
+    private static final Map<Integer, String> COMMERCIAL_DTCS = new HashMap<>();
+
 
     static {
         // --- 1. Standard OBD-II PIDs (Default Baseline) ---
@@ -172,6 +175,116 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         PID_LENGTH_MAP.put(0x2187, 8);
         PID_LENGTH_MAP.put(0x2185, 10);
         PID_LENGTH_MAP.put(0x217f, 13);
+    }
+
+    static {
+        // ==========================================
+        // 1. VOITURES (OBD-II Standard) - Français
+        // ==========================================
+        
+        // --- Moteur / Air / Carburant (P01xx - P02xx) ---
+        PASSENGER_DTCS.put(0x0100, "Panne du circuit de débit d'air massique ou volumique");
+        PASSENGER_DTCS.put(0x0101, "Problème de plage/performance du débit d'air massique");
+        PASSENGER_DTCS.put(0x0105, "Panne du circuit de pression absolue du collecteur");
+        PASSENGER_DTCS.put(0x0110, "Panne du circuit de température d'air d'admission");
+        PASSENGER_DTCS.put(0x0115, "Panne du circuit de température du liquide de refroidissement");
+        PASSENGER_DTCS.put(0x0120, "Panne du circuit du capteur de position du papillon");
+        PASSENGER_DTCS.put(0x0130, "Panne du circuit de la sonde O2 (Banc 1 Capteur 1)");
+        PASSENGER_DTCS.put(0x0171, "Système trop pauvre (Banc 1) - Vérifier fuite d'air");
+        PASSENGER_DTCS.put(0x0172, "Système trop riche (Banc 1) - Vérifier injecteurs");
+        PASSENGER_DTCS.put(0x0200, "Panne du circuit d'injecteur (Général)");
+        PASSENGER_DTCS.put(0x0201, "Panne du circuit d'injecteur - Cylindre 1");
+        PASSENGER_DTCS.put(0x0230, "Panne du circuit primaire de pompe à carburant");
+
+        // --- Allumage & Ratés (P03xx) ---
+        PASSENGER_DTCS.put(0x0300, "Ratés d'allumage aléatoires/multiples détectés");
+        PASSENGER_DTCS.put(0x0301, "Ratés d'allumage - Cylindre 1");
+        PASSENGER_DTCS.put(0x0302, "Ratés d'allumage - Cylindre 2");
+        PASSENGER_DTCS.put(0x0303, "Ratés d'allumage - Cylindre 3");
+        PASSENGER_DTCS.put(0x0304, "Ratés d'allumage - Cylindre 4");
+        PASSENGER_DTCS.put(0x0325, "Panne du circuit du capteur de cliquetis 1");
+        PASSENGER_DTCS.put(0x0335, "Panne du circuit du capteur de vilebrequin A");
+        PASSENGER_DTCS.put(0x0340, "Panne du circuit du capteur d'arbre à cames A");
+
+        // --- Émissions & Catalyseur (P04xx) ---
+        PASSENGER_DTCS.put(0x0400, "Dysfonctionnement du débit EGR");
+        PASSENGER_DTCS.put(0x0420, "Efficacité du système catalyseur inférieure au seuil");
+        PASSENGER_DTCS.put(0x0440, "Dysfonctionnement du système EVAP (Vapeurs essence)");
+        PASSENGER_DTCS.put(0x0442, "Fuite détectée dans le système EVAP (Petite fuite)");
+
+        // --- Vitesse & Ralenti (P05xx) ---
+        PASSENGER_DTCS.put(0x0500, "Panne du capteur de vitesse du véhicule");
+        PASSENGER_DTCS.put(0x0505, "Défaut du système de contrôle de ralenti");
+        PASSENGER_DTCS.put(0x0560, "Tension du système anormale");
+        PASSENGER_DTCS.put(0x0562, "Tension du système trop basse (Batterie/Alternateur)");
+
+        // --- Transmission (P07xx) ---
+        PASSENGER_DTCS.put(0x0700, "Dysfonctionnement du système de commande de transmission");
+        PASSENGER_DTCS.put(0x0720, "Panne du circuit de capteur de vitesse de sortie");
+        PASSENGER_DTCS.put(0x0730, "Rapport de démultiplication incorrect");
+
+        // --- Carrosserie / Sécurité (Codes B) ---
+        PASSENGER_DTCS.put(0x8001, "Défaut déploiement Airbag conducteur"); // B0001
+        PASSENGER_DTCS.put(0x8010, "Défaut déploiement Airbag passager"); // B0010
+        PASSENGER_DTCS.put(0x8020, "Défaut déploiement Airbag latéral gauche"); // B0020
+
+        // --- Châssis & Freins (Codes C) ---
+        PASSENGER_DTCS.put(0x4001, "Vanne de contrôle de traction A"); // C0001
+        PASSENGER_DTCS.put(0x4035, "Capteur vitesse roue avant gauche"); // C0035
+        PASSENGER_DTCS.put(0x4040, "Contacteur de pédale de frein A"); // C0040
+
+        // --- Communication Réseau (Codes U) ---
+        PASSENGER_DTCS.put(0xC001, "Bus de communication CAN haute vitesse"); // U0001
+        PASSENGER_DTCS.put(0xC100, "Perte de communication avec ECM/PCM A"); // U0100
+        PASSENGER_DTCS.put(0xC101, "Perte de communication avec TCM (Transmission)"); // U0101
+        PASSENGER_DTCS.put(0xC121, "Perte de communication avec module ABS"); // U0121
+
+
+        // ==========================================
+        // 2. VÉHICULES COMMERCIAUX / POIDS LOURDS (J1939 SPN) - Français
+        // ==========================================
+        
+        // --- Fluides & Pressions Critiques ---
+        COMMERCIAL_DTCS.put(94, "Pression d'alimentation carburant");
+        COMMERCIAL_DTCS.put(96, "Niveau de carburant");
+        COMMERCIAL_DTCS.put(97, "Eau dans le carburant");
+        COMMERCIAL_DTCS.put(98, "Niveau d'huile moteur");
+        COMMERCIAL_DTCS.put(100, "Pression d'huile moteur");
+        COMMERCIAL_DTCS.put(101, "Pression du carter");
+        COMMERCIAL_DTCS.put(102, "Pression du collecteur d'admission (Turbo)");
+        COMMERCIAL_DTCS.put(111, "Niveau de liquide de refroidissement");
+
+        // --- Températures ---
+        COMMERCIAL_DTCS.put(105, "Température collecteur d'admission");
+        COMMERCIAL_DTCS.put(110, "Température liquide de refroidissement");
+        COMMERCIAL_DTCS.put(173, "Température gaz d'échappement");
+        COMMERCIAL_DTCS.put(174, "Température carburant");
+        COMMERCIAL_DTCS.put(175, "Température huile moteur");
+        COMMERCIAL_DTCS.put(177, "Température huile transmission");
+
+        // --- Électrique ---
+        COMMERCIAL_DTCS.put(114, "Courant net de la batterie");
+        COMMERCIAL_DTCS.put(158, "Tension batterie (Après contact)");
+        COMMERCIAL_DTCS.put(167, "Tension système de charge (Alternateur)");
+        COMMERCIAL_DTCS.put(168, "Tension batterie / Entrée alimentation");
+
+        // --- Moteur & Opération ---
+        COMMERCIAL_DTCS.put(27, "Position vanne EGR");
+        COMMERCIAL_DTCS.put(84, "Vitesse du véhicule (Roues)");
+        COMMERCIAL_DTCS.put(91, "Position pédale accélérateur");
+        COMMERCIAL_DTCS.put(92, "Charge moteur (%)");
+        COMMERCIAL_DTCS.put(190, "Régime moteur (RPM)");
+        COMMERCIAL_DTCS.put(247, "Heures totales fonctionnement moteur");
+        
+        // --- Freins & Sécurité ---
+        COMMERCIAL_DTCS.put(563, "Système ABS Actif");
+        COMMERCIAL_DTCS.put(597, "Contacteur de frein");
+        COMMERCIAL_DTCS.put(1086, "Pression d'air (Stationnement/Remorque)");
+        
+        // --- Défauts Système Communs ---
+        COMMERCIAL_DTCS.put(625, "Erreur liaison de données (Bus CAN)");
+        COMMERCIAL_DTCS.put(1231, "Erreur liaison de données J1939");
+        COMMERCIAL_DTCS.put(2000, "Défaut processeur ECU");
     }
 
     public CastelProtocolDecoder(Protocol protocol) {
@@ -609,21 +722,50 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
                 decodeStat(position, buf);
 
-                buf.readUnsignedByte(); // flag
+                buf.readUnsignedByte(); // flag (Stored vs Pending)
 
                 count = buf.readUnsignedByte();
                 StringBuilder codes = new StringBuilder();
+                
                 for (int i = 0; i < count; i++) {
                     if (type == MSG_SC_DTCS_COMMERCIAL) {
-                        codes.append(ObdDecoder.decodeCode(buf.readUnsignedShortLE()));
-                        buf.readUnsignedByte(); // attribute
-                        buf.readUnsignedByte(); // occurrence
+                        // Commercial uses 4 bytes: SPN (2 bytes) + Attributes (1 byte) + Count (1 byte)
+                        int spn = buf.readUnsignedShortLE();
+                        buf.readUnsignedByte(); // attribute/FMI
+                        buf.readUnsignedByte(); // occurrence count
+                        
+                        // Look up the description
+                        String desc = COMMERCIAL_DTCS.getOrDefault(spn, "SPN " + spn);
+                        codes.append(desc).append(", ");
+                        
                     } else {
-                        codes.append(ObdDecoder.decodeCode(buf.readUnsignedShortLE()));
+                        // Passenger uses 2 bytes: Code
+                        int codeRaw = buf.readUnsignedShortLE();
+                        
+                        // Decode the prefix (P, C, B, U) based on high bits
+                        // 0x0... = P, 0x4... = C, 0x8... = B, 0xC... = U [cite: 365]
+                        char prefix;
+                        int highNibble = (codeRaw >> 12) & 0xF;
+                        if (highNibble >= 0xC) prefix = 'U';
+                        else if (highNibble >= 0x8) prefix = 'B';
+                        else if (highNibble >= 0x4) prefix = 'C';
+                        else prefix = 'P';
+                        
+                        // Mask off the prefix bits to get the number
+                        int codeNum = codeRaw & 0x3FFF; 
+                        String formattedCode = String.format("%c%04X", prefix, codeNum);
+                        
+                        // Look up description
+                        String desc = PASSENGER_DTCS.getOrDefault(codeRaw, formattedCode);
+                        codes.append(desc).append(", ");
                     }
-                    codes.append(' ');
                 }
-                position.set(Position.KEY_DTCS, codes.toString().trim());
+                
+                if (codes.length() > 0) {
+                    // Remove trailing comma
+                    codes.setLength(codes.length() - 2);
+                    position.set(Position.KEY_DTCS, codes.toString());
+                }
 
                 return position;
 

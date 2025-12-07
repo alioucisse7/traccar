@@ -261,17 +261,16 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         }
 
         for (int i = 0; i < count; i++) {
-            int value;
+            int value = 0;
+            
+            // Safety: If we don't know the PID length, we must stop or the stream breaks.
             if (!PID_LENGTH_MAP.containsKey(pids[i])) {
-                // If we hit an unknown PID, log it and return to avoid crashing the whole decoder.
-                // You can check your logs for this message to identify missing PIDs.
-                // System.out.println("Unknown PID encountered: " + String.format("0x%04x", pids[i])); 
                 return;
             }
-            
+
             int length = PID_LENGTH_MAP.get(pids[i]);
             
-            // Handle variable lengths dynamically based on map
+            // 1. READ THE VALUE
             if (length == 1) {
                 value = buf.readUnsignedByte();
             } else if (length == 2) {
@@ -279,15 +278,23 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             } else if (length == 4) {
                 value = buf.readIntLE();
             } else {
-                // For lengths 8, 10, 13 etc., we skip for now or implement specific parsing
-                // To avoid crashing, we skip the bytes.
+                // If data is too long (e.g. 8 bytes or strings), skip it.
+                // We cannot save these as simple IO numbers.
                 buf.skipBytes(length);
-                value = 0; 
+                continue; 
             }
+
+            // 2. SAVE THE DATA (The "Force IO" Fix)
+            // First, try to see if Traccar knows a standard name for it (like "rpm")
+            Map.Entry<String, Object> entry = ObdDecoder.decodeData(pids[i], value, false);
             
-            // Only decode standard OBD data if it fits the decoder
-            if (length <= 4) {
-                position.add(ObdDecoder.decodeData(pids[i], value, false));
+            if (entry != null) {
+                // It's a standard PID, save it normally
+                position.add(entry);
+            } else {
+                // It's a Commercial/Unknown PID, FORCE it to appear as io[PID]
+                // This ensures io247, io224, etc. appear in your attributes
+                position.set(Position.PREFIX_IO + pids[i], value);
             }
         }
     }

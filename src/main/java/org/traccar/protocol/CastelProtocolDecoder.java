@@ -453,13 +453,44 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                 if (type == MSG_SC_ALARM) {
                     int alarmCount = buf.readUnsignedByte();
                     for (int i = 0; i < alarmCount; i++) {
-                        if (buf.readUnsignedByte() != 0) {
+                        if (buf.readUnsignedByte() != 0) { // Alarm active flag
                             int event = buf.readUnsignedByte();
+                            
+                            // 1. READ THE VALUE (Correctly reading the 2-byte description)
+                            int description = buf.readUnsignedShortLE(); // This contains Speed or G-Force
+                            int threshold = buf.readUnsignedShortLE();   // The limit that was broken
+                            
                             for (Position p : positions) {
                                 decodeAlarm(p, event);
+                                
+                                // 2. SAVE EXTRA DATA based on event type
+                                switch (event) {
+                                    case 0x04: // Hard Acceleration
+                                    case 0x05: // Hard Braking
+                                    case 0x0B: // Lane Change
+                                    case 0x0C: // Sharp Turn
+                                        // High byte often contains G-value (unit 0.1g) or Speed depending on model
+                                        int highByte = (description >> 8) & 0xFF;
+                                        if (highByte != 0xFF) {
+                                            // Store the intensity (e.g., 5 means 0.5g)
+                                            p.set("eventIntensity", highByte * 0.1); 
+                                        }
+                                        break;
+                                        
+                                    case 0x11: // Crash
+                                        // Low byte indicates direction: 00=Front, 01=Back, 02=Left, 03=Right
+                                        int direction = description & 0xFF;
+                                        String dirStr = switch(direction) {
+                                            case 0 -> "Front";
+                                            case 1 -> "Back";
+                                            case 2 -> "Left";
+                                            case 3 -> "Right";
+                                            default -> "Unknown";
+                                        };
+                                        p.set("crashDirection", dirStr);
+                                        break;
+                                }
                             }
-                            buf.readUnsignedShortLE(); // description
-                            buf.readUnsignedShortLE(); // threshold
                         }
                     }
                 } else if (type == MSG_SC_FUEL) {

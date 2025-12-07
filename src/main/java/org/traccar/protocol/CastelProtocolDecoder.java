@@ -289,7 +289,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             Map.Entry<String, Object> entry = ObdDecoder.decodeData(pids[i], value, false);
             
             if (entry != null) {
-                // It's a standard PID, save it normally
+                
                 position.add(entry);
             } else {
                 // It's a Commercial/Unknown PID, FORCE it to appear as io[PID]

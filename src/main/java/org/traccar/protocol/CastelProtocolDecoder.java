@@ -647,7 +647,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
                 return position;
 
-            case MSG_SC_QUERY_RESPONSE:
+           case MSG_SC_QUERY_RESPONSE:
                 position = createPosition(deviceSession);
 
                 buf.readUnsignedShortLE(); // index
@@ -656,14 +656,37 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
                 int failureCount = buf.readUnsignedByte();
                 for (int i = 0; i < failureCount; i++) {
-                    buf.readUnsignedShortLE(); // tag
+                    buf.readUnsignedShortLE(); // skip failure tags
                 }
 
                 int successCount = buf.readUnsignedByte();
                 for (int i = 0; i < successCount; i++) {
-                    buf.readUnsignedShortLE(); // tag
-                    position.set(Position.KEY_RESULT,
-                            buf.readSlice(buf.readUnsignedShortLE()).toString(StandardCharsets.US_ASCII));
+                    int tag = buf.readUnsignedShortLE();// Read the Tag ID [cite: 848]
+                    int len = buf.readUnsignedShortLE(); // Read the Length
+                    String content = buf.readSlice(len).toString(StandardCharsets.US_ASCII).trim();
+
+                    // Map specific tags to Traccar attributes
+                    switch (tag) {
+                        case 0x2001: // Vehicle VIN [cite: 848]
+                            position.set(Position.KEY_VIN, content);
+                            break;
+                        case 0x2201: // Firmware Version [cite: 848]
+                            position.set(Position.KEY_VERSION_FW, content);
+                            break;
+                        case 0x2202: // Hardware Version [cite: 848]
+                            position.set(Position.KEY_VERSION_HW, content);
+                            break;
+                        case 0x1703: // IMEI [cite: 838]
+                            position.set("imei", content);
+                            break;
+                        case 0x1706: // ICCID (Sim Card ID) [cite: 838]
+                            position.set(Position.KEY_ICCID, content);
+                            break;
+                        default:
+                            // If we don't know the tag, save it as result so you can see it
+                            position.set(Position.KEY_RESULT, content);
+                            break;
+                    }
                 }
 
                 return position;

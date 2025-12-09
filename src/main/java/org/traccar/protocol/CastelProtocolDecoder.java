@@ -175,6 +175,16 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         PID_LENGTH_MAP.put(0x2187, 8);
         PID_LENGTH_MAP.put(0x2185, 10);
         PID_LENGTH_MAP.put(0x217f, 13);
+        // Fuel Consumption & Usage
+        PID_LENGTH_MAP.put(0x00B8, 4); // Instant Fuel Consump 
+        PID_LENGTH_MAP.put(0x00B9, 4); // Avg Fuel Consump 
+        PID_LENGTH_MAP.put(0x00FA, 4); // Total Fuel Used 
+        PID_LENGTH_MAP.put(0x1B60, 4); // Trip Fuel 
+        PID_LENGTH_MAP.put(0x215E, 2); // Passenger Fuel Rate 
+
+        // Oil Data
+        PID_LENGTH_MAP.put(0x0062, 2); // Engine Oil Level 
+        PID_LENGTH_MAP.put(0x1240, 1); // Clutch Wear
     }
 
     static {
@@ -386,10 +396,13 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
             // 1. READ THE VALUE
             if (length == 1) {
                 value = buf.readUnsignedByte();
+                if (value == 255) continue;
             } else if (length == 2) {
                 value = buf.readUnsignedShortLE();
+                if (value == 65535) continue;
             } else if (length == 4) {
                 value = buf.readIntLE();
+                if (value == 4294967295L) continue;
             } else {
                 // If data is too long (e.g. 8 bytes or strings), skip it.
                 // We cannot save these as simple IO numbers.
@@ -418,16 +431,29 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_ODOMETER, buf.readUnsignedIntLE());
         position.set(Position.KEY_ODOMETER_TRIP, buf.readUnsignedIntLE());
         position.set(Position.KEY_FUEL_CONSUMPTION, buf.readUnsignedIntLE());
-        buf.readUnsignedShortLE(); // current fuel consumption
+        
+        // FIX 1: Capture Trip Fuel (was previously skipped)
+        // Value is in 0.01L units. We save it as "tripFuel" attribute.
+        position.set("tripFuel", buf.readUnsignedShortLE() * 0.01); 
 
         long state = buf.readUnsignedIntLE();
+        
+        // FIX 2: Add Driver Behavior Alarms
+        // VSTATE S0 (Byte 0)
         position.addAlarm(BitUtil.check(state, 4) ? Position.ALARM_ACCELERATION : null);
         position.addAlarm(BitUtil.check(state, 5) ? Position.ALARM_BRAKING : null);
         position.addAlarm(BitUtil.check(state, 6) ? Position.ALARM_IDLE : null);
+        position.addAlarm(BitUtil.check(state, 3) ? Position.ALARM_CORNERING : null);// Added Sharp Turn [cite: 331]
+        
+        // VSTATE S1 (Byte 1, shifted by 8 bits)
+        // Bit 2 of Byte 1 = Bit 10 total. (0-7 is byte 0, 8-15 is byte 1)
+        position.addAlarm(BitUtil.check(state, 8 + 2) ? Position.ALARM_LANE_CHANGE : null);// Added Quick Lane Change [cite: 331]
+
+        // Ignition is S2 Bit 2 (16 + 2 = 18)
         position.set(Position.KEY_IGNITION, BitUtil.check(state, 2 * 8 + 2));
         position.set(Position.KEY_STATUS, state);
 
-        buf.skipBytes(8);
+        buf.skipBytes(8); // Reserved bytes
     }
 
     private void sendResponse(
@@ -541,14 +567,17 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                     buf.readUnsignedShortLE();
                 }
 
-                buf.readUnsignedIntLE(); // ACC ON time
-                buf.readUnsignedIntLE(); // UTC time
-                long odometer = buf.readUnsignedIntLE();
-                long tripOdometer = buf.readUnsignedIntLE();
-                long fuelConsumption = buf.readUnsignedIntLE();
-                buf.readUnsignedShortLE(); // current fuel consumption
-                long status = buf.readUnsignedIntLE();
-                buf.skipBytes(8);
+                // buf.readUnsignedIntLE(); // ACC ON time
+                // buf.readUnsignedIntLE(); // UTC time
+                // long odometer = buf.readUnsignedIntLE();
+                // long tripOdometer = buf.readUnsignedIntLE();
+                // long fuelConsumption = buf.readUnsignedIntLE();
+                // buf.readUnsignedShortLE(); // current fuel consumption
+                // long status = buf.readUnsignedIntLE();
+                // buf.skipBytes(8);
+
+                Position statData = new Position();
+                decodeStat(statData, buf);
 
                 count = buf.readUnsignedByte();
 
@@ -556,11 +585,27 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
                 for (int i = 0; i < count; i++) {
                     position = readPosition(deviceSession, buf);
-                    position.set(Position.KEY_ODOMETER, odometer);
-                    position.set(Position.KEY_ODOMETER_TRIP, tripOdometer);
-                    position.set(Position.KEY_FUEL_CONSUMPTION, fuelConsumption);
-                    position.set(Position.KEY_STATUS, status);
+                   position.setAttributes(statData.getAttributes()); 
+                    position.set(Position.KEY_ODOMETER, statData.getDouble(Position.KEY_ODOMETER));
+                    position.set(Position.KEY_ODOMETER_TRIP, statData.getDouble(Position.KEY_ODOMETER_TRIP));
+                    position.set(Position.KEY_FUEL_CONSUMPTION, statData.getLong(Position.KEY_FUEL_CONSUMPTION));
+                    position.set(Position.KEY_STATUS, statData.getLong(Position.KEY_STATUS));
+                    position.set(Position.KEY_IGNITION, statData.getBoolean(Position.KEY_IGNITION));
+                    
                     positions.add(position);
+                }
+
+                // --- RPM Fix for 0x4001 ---
+                if (type == MSG_SC_GPS && buf.readableBytes() >= 1) {
+                    int rpmCount = buf.readUnsignedByte();
+                    for (int i = 0; i < rpmCount; i++) {
+                        if (buf.readableBytes() >= 2) {
+                            int rpm = buf.readUnsignedShortLE();
+                            if (!positions.isEmpty() && i < positions.size()) {
+                                positions.get(i).set(Position.KEY_RPM, rpm);
+                            }
+                        }
+                    }
                 }
 
                 if (type == MSG_SC_ALARM) {
@@ -690,29 +735,45 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
             case MSG_SC_G_SENSOR:
                 position = createPosition(deviceSession);
-
                 decodeStat(position, buf);
-
                 buf.readUnsignedShortLE(); // sample rate
-
+                
                 count = buf.readUnsignedByte();
-
                 StringBuilder data = new StringBuilder("[");
+                
+                // Threshold for detecting alarms from raw data (0.4g is standard)
+                double ALARM_THRESHOLD = 0.4;
+                boolean harshAccel = false;
+                boolean harshBrake = false;
+                boolean harshTurn = false;
+
                 for (int i = 0; i < count; i++) {
-                    if (i > 0) {
-                        data.append(",");
-                    }
-                    data.append("[");
-                    data.append(buf.readShortLE() * 0.015625);
-                    data.append(",");
-                    data.append(buf.readShortLE() * 0.015625);
-                    data.append(",");
-                    data.append(buf.readShortLE() * 0.015625);
-                    data.append("]");
+                    if (i > 0) data.append(",");
+                    
+                    // Read Raw Values
+                    double x = buf.readShortLE() * 0.015625; // Side-to-Side (Cornering)
+                    double y = buf.readShortLE() * 0.015625; // Forward/Back (Accel/Brake)
+                    double z = buf.readShortLE() * 0.015625; // Up/Down (Gravity)
+
+                    // Build JSON string
+                    data.append(String.format("[%.4f,%.4f,%.4f]", x, y, z));
+
+                    // --- ANALYZE FOR ALARMS ---
+                    // Y-Axis: Negative = Braking, Positive = Acceleration
+                    if (y > ALARM_THRESHOLD) harshAccel = true;
+                    if (y < -ALARM_THRESHOLD) harshBrake = true;
+                    
+                    // X-Axis: Absolute value > Threshold = Cornering
+                    if (Math.abs(x) > ALARM_THRESHOLD) harshTurn = true;
                 }
                 data.append("]");
-
+                
                 position.set(Position.KEY_G_SENSOR, data.toString());
+
+                // Trigger Alarms if detected in the raw data
+                if (harshAccel) position.addAlarm(Position.ALARM_ACCELERATION);
+                if (harshBrake) position.addAlarm(Position.ALARM_BRAKING);
+                if (harshTurn) position.addAlarm(Position.ALARM_CORNERING);
 
                 return position;
 
@@ -823,6 +884,16 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                             break;
                         case 0x1706: // ICCID (Sim Card ID) [cite: 838]
                             position.set(Position.KEY_ICCID, content);
+                            break;
+                        case 0x2801: // Work Mode (1 Byte)
+                            int mode = buf.readUnsignedByte();
+                            String modeStr = switch(mode) {
+                                case 0 -> "Passenger";
+                                case 1 -> "HeavyDuty";
+                                case 2 -> "Tracker";
+                                default -> "Unknown (" + mode + ")";
+                            };
+                            position.set("workMode", modeStr);
                             break;
                         default:
                             // If we don't know the tag, save it as result so you can see it

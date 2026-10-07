@@ -448,17 +448,25 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
             // 1. READ THE VALUE
             boolean signed = SIGNED_PIDS.contains(pids[i]);
+            // All-ones means "not available" for unsigned PIDs only. For signed
+            // ones it is -1, a real reading (coolant at -1 C).
             if (length == 1) {
                 value = buf.readUnsignedByte();
-                if (value == 0xFF) continue;
-                if (signed) value = (byte) value;
+                if (signed) {
+                    value = (byte) value;
+                } else if (value == 0xFF) {
+                    continue;
+                }
             } else if (length == 2) {
                 value = buf.readUnsignedShortLE();
-                if (value == 0xFFFF) continue;
-                if (signed) value = (short) value;
+                if (signed) {
+                    value = (short) value;
+                } else if (value == 0xFFFF) {
+                    continue;
+                }
             } else if (length == 4) {
                 value = buf.readIntLE();
-                if (value == -1) continue; // 0xFFFFFFFF, not available
+                if (!signed && value == -1) continue; // 0xFFFFFFFF, not available
                 if (!signed && value < 0) {
                     position.set(Position.PREFIX_IO + pids[i], value & 0xFFFFFFFFL);
                     continue;

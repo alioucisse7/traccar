@@ -7,6 +7,27 @@ import org.traccar.model.Position;
 public class CastelProtocolDecoderTest extends ProtocolTest {
 
     @Test
+    public void testDecodeCommercialPids() throws Exception {
+
+        var decoder = inject(new CastelProtocolDecoder(null));
+
+        // 0x4002 with PIDs 0x0054, 0x006e, 0x00be, 0x0395 = 0, 68, 601, 0x488d7e1e,
+        // as reported by a truck whose dashboard odometer reads 289776.94 km
+        String commercialPids = "40405600043231384c314542323032363030303031300000004002000000000000000036a54511000000000000000000000000040000000000000000001e000454006e00be0095030108004459021e7e8d48da340d0a";
+
+        verifyAttribute(decoder, binary(commercialPids), "io917", 289776.94);
+        verifyAttribute(decoder, binary(commercialPids), "io190", 601);
+        verifyAttribute(decoder, binary(commercialPids), "io110", 68);
+        verifyAttribute(decoder, binary(commercialPids), "io84", 0);
+
+        // Coolant is S8 in the spec: 0xf6 = -10, 0xe2 = -30, 0xff = -1 (a reading, not "n/a")
+        verifyAttribute(decoder, binary(commercialPids.replace("00445902", "00f65902")), "io110", -10);
+        verifyAttribute(decoder, binary(commercialPids.replace("00445902", "00e25902")), "io110", -30);
+        verifyAttribute(decoder, binary(commercialPids.replace("00445902", "00ff5902")), "io110", -1);
+
+    }
+
+    @Test
     public void testDecode() throws Exception {
 
         var decoder = inject(new CastelProtocolDecoder(null));
@@ -23,7 +44,7 @@ public class CastelProtocolDecoderTest extends ProtocolTest {
 
         verifyAttribute(decoder, binary(
                 "40404700043231335732303139303033353400000000000000400BBE723A5DEF723A5D000000000000000000000000000000000000030100011900030001012603030145C90D0A"),
-                Position.KEY_DTCS, "P0326");
+                Position.KEY_DTCS, "SPN 806"); // 0x400B is J1939: SPN, not an OBD-II P-code
 
         verifyAttribute(decoder, binary(
                 "40404500033231334c323031373030303432320000000000004006e1ad205bf1ad205b48510f000000000050160000000000020400053f007c000083040001511346160d0a"),
@@ -31,7 +52,7 @@ public class CastelProtocolDecoderTest extends ProtocolTest {
 
         verifyAttribute(decoder, binary(
                 "40403a00043231334744503230313830323133343300000000a002000001000001012011004d414c43333831434d4b4d353637313438c8fc0d0a"),
-                Position.KEY_RESULT, "MALC381CMKM567148");
+                Position.KEY_VIN, "MALC381CMKM567148"); // the fork stores 0x2001 as vin
 
         verifyAttributes(decoder, binary(
                 "404043000432313357503230313830303138323400000000004005f064d95c8365d95c9f2f0100c50200004006000000000000040003440068000000000100f3660d0a"));
@@ -41,6 +62,7 @@ public class CastelProtocolDecoderTest extends ProtocolTest {
 
         verifyAttributes(decoder, binary(
                 "4040560004323133474c3230313630303033363400000000004002a122a05a5423a05abe0f2a000000000007f1f90014000000040001640011170003001e000505210b210c210d210f2101062b58ef02001a25950d0a"));
+
 
         verifyAttributes(decoder, binary(
                 "404057000431303031313132353239393837000000000000004002C1F06952F0F169529C9111000000000069830000470000000400036401014C01030078000505210C210D210F21102101073BE8030064280AEB930D0A"));

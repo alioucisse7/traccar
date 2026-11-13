@@ -653,7 +653,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
                 for (int i = 0; i < count; i++) {
                     position = readPosition(deviceSession, buf);
-                   position.setAttributes(statData.getAttributes()); 
+                    position.getAttributes().putAll(statData.getAttributes()); // a copy: positions must not share one map
                     position.set(Position.KEY_ODOMETER, statData.getDouble(Position.KEY_ODOMETER));
                     position.set(Position.KEY_ODOMETER_TRIP, statData.getDouble(Position.KEY_ODOMETER_TRIP));
                     position.set(Position.KEY_FUEL_CONSUMPTION, statData.getLong(Position.KEY_FUEL_CONSUMPTION));

@@ -28,6 +28,29 @@ public class CastelProtocolDecoderTest extends ProtocolTest {
     }
 
     @Test
+    public void testDecodeCommandResponses() throws Exception {
+
+        var decoder = inject(new CastelProtocolDecoder(null));
+
+        // 0xA001, the answer to a 0x2001 "set parameters": seq 0x1234, tags
+        // 0x1102 and 0x1103 accepted. Kept whole as hex for the platform.
+        verifyAttribute(decoder, binary(
+                "40402600043231384c31454232303236303030303032000000a00134120202110311b6870d0a"),
+                Position.KEY_RESULT, "a001:34120202110311");
+
+        // 0xA002 with the binary work mode (0x2801 = 1) before the VIN: the
+        // whole answer is in the result, and the VIN still reads right, which
+        // it did not while 0x2801 took one byte too many.
+        String query = "40403f00043231384c31454232303236303030303032000000a002"
+                + "0000010000020128010001012011004d414c43333831434d4b4d35363731343861ee0d0a";
+        verifyAttribute(decoder, binary(query), Position.KEY_RESULT,
+                "a002:0000010000020128010001012011004d414c43333831434d4b4d353637313438");
+        verifyAttribute(decoder, binary(query), "workMode", "HeavyDuty");
+        verifyAttribute(decoder, binary(query), Position.KEY_VIN, "MALC381CMKM567148");
+
+    }
+
+    @Test
     public void testDecode() throws Exception {
 
         var decoder = inject(new CastelProtocolDecoder(null));

@@ -365,6 +365,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
     public static final short MSG_SC_FUEL = 0x400E;
     public static final short MSG_SC_COMPREHENSIVE = 0x401F;
     public static final short MSG_SC_AGPS_REQUEST = 0x5101;
+    public static final short MSG_SC_SET_RESPONSE = (short) 0xA001;
     public static final short MSG_SC_QUERY_RESPONSE = (short) 0xA002;
     public static final short MSG_SC_CURRENT_LOCATION = (short) 0xB001;
 
@@ -402,6 +403,12 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_SATELLITES, flags >> 4);
 
         return position;
+    }
+
+    // The message content: from the reader index to the CRC and "\r\n".
+    private static String contentHex(ByteBuf buf) {
+        int length = buf.writerIndex() - 4 - buf.readerIndex();
+        return length > 0 ? ByteBufUtil.hexDump(buf, buf.readerIndex(), length) : "";
     }
 
     private Position createPosition(DeviceSession deviceSession) {
@@ -918,8 +925,21 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
 
                 return position;
 
+           case MSG_SC_SET_RESPONSE:
+                // The answer to a 0x2001 "set parameters" sent from the platform
+                // (a Traccar custom command). Kept whole, as hex, for the platform
+                // to decode: it becomes a standard commandResult event.
+                position = createPosition(deviceSession);
+                position.set(Position.KEY_RESULT, "a001:" + contentHex(buf));
+                return position;
+
            case MSG_SC_QUERY_RESPONSE:
                 position = createPosition(deviceSession);
+
+                // The whole answer as hex too: most values are binary (U8, U16)
+                // and do not survive the ASCII reading below. Taken before the
+                // loop moves the reader index.
+                position.set(Position.KEY_RESULT, "a002:" + contentHex(buf));
 
                 buf.readUnsignedShortLE(); // index
                 buf.readUnsignedByte(); // response count
@@ -934,7 +954,8 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                 for (int i = 0; i < successCount; i++) {
                     int tag = buf.readUnsignedShortLE();// Read the Tag ID [cite: 848]
                     int len = buf.readUnsignedShortLE(); // Read the Length
-                    String content = buf.readSlice(len).toString(StandardCharsets.US_ASCII).trim();
+                    ByteBuf value = buf.readSlice(len);
+                    String content = value.toString(StandardCharsets.US_ASCII).trim();
 
                     // Map specific tags to Traccar attributes
                     switch (tag) {
@@ -954,7 +975,9 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                             position.set(Position.KEY_ICCID, content);
                             break;
                         case 0x2801: // Work Mode (1 Byte)
-                            int mode = buf.readUnsignedByte();
+                            // From the value itself: buf.readUnsignedByte() here
+                            // took the byte after it, the next tag's first byte.
+                            int mode = len > 0 ? value.getUnsignedByte(0) : -1;
                             String modeStr = switch(mode) {
                                 case 0 -> "Passenger";
                                 case 1 -> "HeavyDuty";
@@ -964,8 +987,7 @@ public class CastelProtocolDecoder extends BaseProtocolDecoder {
                             position.set("workMode", modeStr);
                             break;
                         default:
-                            // If we don't know the tag, save it as result so you can see it
-                            position.set(Position.KEY_RESULT, content);
+                            // Every value is in KEY_RESULT, as hex, set above.
                             break;
                     }
                 }
